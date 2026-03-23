@@ -1,1 +1,114 @@
+#!/usr/bin/env python3
+"""Generate a structured manual report from CLI arguments or interactive prompts."""
 
+from __future__ import annotations
+
+import argparse
+from datetime import date
+from pathlib import Path
+import sys
+
+SECTIONS = [
+    ("report_date", "Report date"),
+    ("author", "Author"),
+    ("project", "Project"),
+    ("summary", "Summary"),
+    ("work_completed", "Work completed"),
+    ("issues", "Issues / blockers"),
+    ("next_steps", "Next steps"),
+]
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Automate the creation of a manual status report."
+    )
+    parser.add_argument("--output", "-o", help="Write the report to a file instead of stdout.")
+    parser.add_argument("--interactive", "-i", action="store_true", help="Prompt for missing values.")
+
+    for field, label in SECTIONS:
+        parser.add_argument(f"--{field.replace('_', '-')}", dest=field, help=f"{label} text.")
+
+    return parser
+
+
+def prompt(label: str, default: str = "") -> str:
+    suffix = f" [{default}]" if default else ""
+    value = input(f"{label}{suffix}: ").strip()
+    return value or default
+
+
+def collect_values(args: argparse.Namespace) -> dict[str, str]:
+    values = {
+        "report_date": args.report_date or str(date.today()),
+        "author": args.author or "",
+        "project": args.project or "",
+        "summary": args.summary or "",
+        "work_completed": args.work_completed or "",
+        "issues": args.issues or "None",
+        "next_steps": args.next_steps or "",
+    }
+
+    if args.interactive:
+        for field, label in SECTIONS:
+            values[field] = prompt(label, values[field])
+
+    return values
+
+
+def render_report(values: dict[str, str]) -> str:
+    return "\n".join(
+        [
+            "MANUAL REPORT",
+            "=============",
+            f"Date: {values['report_date']}",
+            f"Author: {values['author'] or 'N/A'}",
+            f"Project: {values['project'] or 'N/A'}",
+            "",
+            "Summary",
+            "-------",
+            values["summary"] or "N/A",
+            "",
+            "Work Completed",
+            "--------------",
+            values["work_completed"] or "N/A",
+            "",
+            "Issues / Blockers",
+            "-----------------",
+            values["issues"] or "None",
+            "",
+            "Next Steps",
+            "----------",
+            values["next_steps"] or "N/A",
+            "",
+        ]
+    )
+
+
+def write_report(report: str, output_path: str | None) -> None:
+    if not output_path:
+        print(report)
+        return
+
+    path = Path(output_path)
+    path.write_text(report + "\n", encoding="utf-8")
+    print(f"Report written to {path}")
+
+
+def main() -> int:
+    parser = build_parser()
+    args = parser.parse_args()
+    values = collect_values(args)
+
+    if not args.interactive and not any(
+        getattr(args, field) for field, _ in SECTIONS if field != "report_date"
+    ):
+        parser.error("provide report details via flags or use --interactive")
+
+    report = render_report(values)
+    write_report(report, args.output)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
